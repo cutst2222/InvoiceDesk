@@ -1,73 +1,138 @@
 # Consultant Invoice Submission
 
-Desktop app for consultant invoice submission with role-based access control, admin approvals, and invoice file lifecycle management.
+A production-ready desktop application for consultant invoice operations with role-based access control, approval workflow, and secure file lifecycle management.
 
-## Roles
+## Overview
 
-- Admin
-  - Default login (created automatically at backend startup):
-    - Email: `Maryannsimi@gmail.com`
-    - Password: `InvoiceDesk`
-  - Can approve/reject consultant registrations.
-  - Can edit any user details.
-  - Can view/edit any invoice.
-  - Can approve/reject invoices.
-  - Can download approved invoice files (PDF/image).
-  - After an approved file is downloaded, the file is deleted from disk.
-  - If an invoice is rejected, the file is deleted immediately.
+This application enables consultants to register, submit invoices, and manage their own records. Admin users approve consultants, review invoices, and control final approval, viewing, download, and deletion.
 
-- Consultant
-  - Can register account.
-  - Login is blocked until admin approval.
-  - Can create/edit only their own invoices.
-  - Can update their own profile details.
+The system is built as:
 
-## Invoice File Workflow
+- `frontend`: React + Vite desktop UI
+- `backend`: Express + MongoDB API
+- `tauri-app`: Tauri desktop wrapper (Rust)
 
-Consultants upload invoice file as PDF/image when submitting invoice.
+## Key Features
 
-- Allowed types: `application/pdf`, `image/png`, `image/jpeg`, `image/jpg`
-- Admin approval state: `pending | approved | rejected`
-- Rejected invoice: file deleted immediately.
-- Approved invoice: admin can download once, then file is deleted to save space.
+- Role-based access (`admin`, `consultant`)
+- Consultant registration with admin approval gate
+- JWT authentication with HTTP-only cookie session
+- Invoice create, edit, and delete (ownership enforced)
+- Admin invoice approval / rejection
+- Admin invoice file view and download
+- File lifecycle cleanup to reduce storage usage
+- INR currency formatting (`en-IN`)
+- Optional SMTP email notifications with safe fallback
+- Dark mode toggle (persisted locally)
+
+## Technology Stack
+
+### Frontend
+
+- React (Vite)
+- TailwindCSS
+- React Hook Form
+- Axios
+
+### Backend
+
+- Node.js
+- Express.js
+- MongoDB (Mongoose)
+- JWT auth
+- bcrypt password hashing
+- Nodemailer
+- Puppeteer
+
+### Desktop
+
+- Tauri (Rust)
 
 ## Project Structure
 
 ```text
-root
-+ backend
-¦ + controllers
-¦ + middleware
-¦ + models
-¦ + routes
-¦ + scripts
-¦ + services
-¦ + utils
-¦ + server.js
-+ frontend
-¦ + src
-¦ ¦ + components
-¦ ¦ + context
-¦ ¦ + hooks
-¦ ¦ + pages
-¦ ¦ + services
-¦ ¦ + App.jsx
-+ tauri-app
-¦ + src-tauri
-+ scripts
+InvoiceDesk/
+  backend/
+    controllers/
+    middleware/
+    models/
+    routes/
+    scripts/
+    services/
+    utils/
+    server.js
+  frontend/
+    src/
+      components/
+      context/
+      hooks/
+      pages/
+      services/
+      App.jsx
+  tauri-app/
+    src-tauri/
+  scripts/
 ```
 
-## Setup
+## Application Pipeline
 
-### 1. Install dependencies
+### 1. User Onboarding Pipeline
 
-From project root:
+1. Consultant registers via `POST /api/auth/register`
+2. Account status is set to `pending`
+3. Admin reviews pending consultants and approves/rejects
+4. Consultant login is allowed only when status is `approved`
 
-```bash
-npm run install:all
-```
+### 2. Authentication Pipeline
 
-### 2. Configure backend environment
+1. User logs in with email/password
+2. Backend validates credentials (`bcrypt`)
+3. JWT is issued and stored in an HTTP-only cookie
+4. Protected routes enforce authentication + role checks
+
+### 3. Invoice Submission Pipeline
+
+1. Approved consultant submits invoice form
+2. Backend validates all required fields
+3. Invoice file (image or PDF) is stored in server storage
+4. Invoice document is saved in MongoDB with `pending` status
+5. A generated PDF summary is created via Puppeteer
+6. Confirmation/admin emails are attempted (non-blocking fallback)
+
+### 4. Invoice Review Pipeline (Admin)
+
+1. Admin reviews invoice details and file
+2. Admin can approve or reject
+3. If rejected:
+   - Invoice file is deleted immediately
+4. If approved:
+   - Admin can view file inline
+   - Admin can download file
+   - After download, file is deleted from disk
+
+### 5. Invoice Ownership + Deletion Pipeline
+
+- Consultant can edit/delete only own invoices
+- Admin can edit/delete any invoice
+- Deletion removes associated file from storage and document from database
+
+## Roles and Permissions
+
+### Admin
+
+- Default bootstrap user is created automatically at backend startup
+- Can approve/reject consultant registrations
+- Can edit any user
+- Can view/edit/approve/reject/delete any invoice
+- Can view and download approved invoice files
+
+### Consultant
+
+- Can register and update own profile
+- Must be approved by admin before login actions
+- Can create/edit/delete only own invoices
+
+## Environment Configuration
 
 Create env file:
 
@@ -75,78 +140,91 @@ Create env file:
 copy backend/.env.example backend/.env
 ```
 
-Open `backend/.env` and set these values.
+Update [backend/.env](c:/Users/joshu/consultant-invoice-app/InvoiceDesk/backend/.env):
 
 Required:
 
 - `MONGO_URI`
-  - Paste your MongoDB connection string here.
-  - Example: `MONGO_URI=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/consultant_invoice_submission?retryWrites=true&w=majority`
 - `JWT_SECRET`
-  - Use a long random secret.
 
-Admin defaults (already set in `.env.example`):
+Admin bootstrap:
 
-- `ADMIN_EMAIL=Maryannsimi@gmail.com`
-- `ADMIN_PASSWORD=InvoiceDesk`
-- `ADMIN_NAME=Mary Ann`
+- `ADMIN_NAME`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
 
-Optional but recommended:
+Optional email config:
 
-- SMTP values for real emails:
-  - `SMTP_HOST`
-  - `SMTP_PORT`
-  - `SMTP_SECURE`
-  - `SMTP_USER`
-  - `SMTP_PASS`
-  - `EMAIL_FROM`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `EMAIL_FROM`
+- `SMTP_DISABLED=true` (force local fallback)
 
-If SMTP is not configured, app uses JSON transport fallback (no real email delivery).
+## Setup and Run
 
-### 3. (Optional) Seed an approved consultant
+### 1. Install dependencies
 
 ```bash
-npm --prefix backend run seed:consultant
+npm run install:all
 ```
 
-### 4. Run desktop app (backend + frontend + tauri)
+### 2. Start desktop development mode
 
 ```bash
 npm run tauri dev
 ```
 
-### 5. Build desktop app
+This starts:
+
+- Backend API (`backend`)
+- Frontend Vite server (`frontend`)
+- Tauri desktop shell (`tauri-app`)
+
+### 3. Build desktop app
 
 ```bash
 npm run tauri build
 ```
 
-## Main APIs
+## API Summary
 
-- Auth
-  - `POST /api/auth/register`
-  - `POST /api/auth/login`
-  - `GET /api/auth/me`
-  - `PUT /api/auth/me`
-  - `POST /api/auth/logout`
-  - `GET /api/auth/users` (admin)
-  - `GET /api/auth/users/pending` (admin)
-  - `PATCH /api/auth/users/:userId/approval` (admin)
-  - `PUT /api/auth/users/:userId` (admin)
+### Auth
 
-- Invoices
-  - `POST /api/invoices`
-  - `GET /api/invoices`
-  - `GET /api/invoices/:invoiceId`
-  - `PUT /api/invoices/:invoiceId`
-  - `PATCH /api/invoices/:invoiceId/approval` (admin)
-  - `GET /api/invoices/:invoiceId/download` (admin)
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `PUT /api/auth/me`
+- `POST /api/auth/logout`
+- `GET /api/auth/users` (admin)
+- `GET /api/auth/users/pending` (admin)
+- `PATCH /api/auth/users/:userId/approval` (admin)
+- `PUT /api/auth/users/:userId` (admin)
 
-## Security
+### Invoices
 
-- JWT with HTTP-only cookie session
+- `POST /api/invoices`
+- `GET /api/invoices`
+- `GET /api/invoices/:invoiceId`
+- `PUT /api/invoices/:invoiceId`
+- `DELETE /api/invoices/:invoiceId`
+- `PATCH /api/invoices/:invoiceId/approval` (admin)
+- `GET /api/invoices/:invoiceId/view` (admin)
+- `GET /api/invoices/:invoiceId/download` (admin)
+
+## Security Controls
+
+- JWT session cookie (`httpOnly`, same-site)
 - Password hashing with bcrypt
-- Role-based authorization middleware (`admin`, `consultant`)
-- Request validation with `express-validator`
-- Input sanitization with `express-mongo-sanitize`
-- Helmet security headers
+- Role-based middleware authorization
+- Input validation (`express-validator`)
+- Input sanitization (`express-mongo-sanitize`)
+- Security headers (`helmet`)
+
+## Notes
+
+- Currency display is INR.
+- Dark mode is available via UI toggle.
+- Invoice file types supported: PDF, PNG, JPG, JPEG.

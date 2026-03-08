@@ -16,13 +16,25 @@ const invoiceAccessQuery = (user, invoiceId) => {
   return { _id: invoiceId, consultantId: user.id };
 };
 
+const normalizeAmount = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+};
+
 const mapInvoiceFields = (payload, existingInvoice = {}) => ({
   invoiceNumber: payload.invoiceNumber ?? existingInvoice.invoiceNumber,
   invoiceMonth: payload.invoiceMonth ?? existingInvoice.invoiceMonth,
   invoiceYear: payload.invoiceYear ?? existingInvoice.invoiceYear,
   consultingPeriodFrom: payload.consultingPeriodFrom ?? existingInvoice.consultingPeriodFrom,
   consultingPeriodTo: payload.consultingPeriodTo ?? existingInvoice.consultingPeriodTo,
-  invoiceAmount: payload.invoiceAmount ?? existingInvoice.invoiceAmount,
+  invoiceAmount:
+    payload.invoiceAmount !== undefined && payload.invoiceAmount !== null
+      ? normalizeAmount(payload.invoiceAmount)
+      : existingInvoice.invoiceAmount,
   serviceProvided: payload.serviceProvided ?? existingInvoice.serviceProvided,
   serviceProvidedDetails:
     payload.serviceProvidedDetails ?? existingInvoice.serviceProvidedDetails ?? '',
@@ -101,7 +113,11 @@ export const submitInvoice = async (req, res, next) => {
 
 export const listInvoices = async (req, res, next) => {
   try {
-    const query = isAdmin(req.user) ? {} : { consultantId: req.user.id };
+    const archivedOnly = req.query.archived === 'true';
+    const query = {
+      ...(isAdmin(req.user) ? {} : { consultantId: req.user.id }),
+      archivedAt: archivedOnly ? { $ne: null } : null,
+    };
     const invoices = await Invoice.find(query)
       .populate('consultantId', 'name email')
       .sort({ createdAt: -1 });
@@ -153,6 +169,10 @@ export const updateInvoice = async (req, res, next) => {
 
     Object.assign(invoice, mapInvoiceFields(payload, invoice));
 
+    if (!Number.isFinite(Number(invoice.invoiceAmount)) || Number(invoice.invoiceAmount) <= 0) {
+      return res.status(400).json({ message: 'Invoice amount must be greater than 0' });
+    }
+
     if (new Date(invoice.consultingPeriodTo) < new Date(invoice.consultingPeriodFrom)) {
       return res.status(400).json({ message: 'Consulting period must be valid' });
     }
@@ -191,6 +211,10 @@ export const reviewInvoice = async (req, res, next) => {
 
     if (!invoice) {
       return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    if (invoice.approvalStatus !== 'pending') {
+      return res.status(400).json({ message: 'Only pending invoices can be reviewed' });
     }
 
     invoice.approvalNote = String(note || '').trim();
@@ -317,6 +341,27 @@ export const deleteInvoice = async (req, res, next) => {
     await Invoice.deleteOne({ _id: invoice._id });
 
     return res.json({ message: 'Invoice deleted successfully' });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const archiveInvoice = async (req, res, next) => {
+  try {
+    const invoice = await Invoice.findOne(invoiceAccessQuery(req.user, req.params.invoiceId));
+
+    if (!invoice) {
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
+
+    if (invoice.archivedAt) {
+      return res.status(400).json({ message: 'Invoice is already archived' });
+    }
+
+    invoice.archivedAt = new Date();
+    await invoice.save();
+
+    return res.json({ message: 'Invoice archived successfully' });
   } catch (error) {
     return next(error);
   }

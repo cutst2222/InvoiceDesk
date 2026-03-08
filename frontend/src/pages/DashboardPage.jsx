@@ -7,6 +7,7 @@ import {
   reviewConsultantRequest,
 } from '../services/authService.js';
 import {
+  archiveInvoiceRequest,
   deleteInvoiceRequest,
   downloadInvoiceRequest,
   listInvoicesRequest,
@@ -26,12 +27,20 @@ const getFileNameFromDisposition = (contentDisposition) => {
 function DashboardPage() {
   const { user, logout, updateMyProfile } = useAuth();
   const navigate = useNavigate();
-  const [invoices, setInvoices] = useState([]);
+  const [activeInvoices, setActiveInvoices] = useState([]);
+  const [archivedInvoices, setArchivedInvoices] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [users, setUsers] = useState([]);
   const [nameInput, setNameInput] = useState(user?.name || '');
   const [profileMessage, setProfileMessage] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+  const [activeTab, setActiveTab] = useState('active');
+  const [viewer, setViewer] = useState({
+    open: false,
+    blobUrl: '',
+    mimeType: '',
+    fileName: '',
+  });
 
   const isAdmin = user?.role === 'admin';
   const formatINR = (value) =>
@@ -39,10 +48,22 @@ function DashboardPage() {
       Number(value || 0)
     );
 
+  useEffect(() => {
+    return () => {
+      if (viewer.blobUrl) {
+        window.URL.revokeObjectURL(viewer.blobUrl);
+      }
+    };
+  }, [viewer.blobUrl]);
+
   const loadData = async () => {
     try {
-      const invoiceResponse = await listInvoicesRequest();
-      setInvoices(invoiceResponse.invoices || []);
+      const [activeResponse, archivedResponse] = await Promise.all([
+        listInvoicesRequest({ archived: false }),
+        listInvoicesRequest({ archived: true }),
+      ]);
+      setActiveInvoices(activeResponse.invoices || []);
+      setArchivedInvoices(archivedResponse.invoices || []);
 
       if (isAdmin) {
         const [pendingResponse, usersResponse] = await Promise.all([
@@ -68,8 +89,11 @@ function DashboardPage() {
   }, [user?.name]);
 
   const sortedInvoices = useMemo(
-    () => [...invoices].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-    [invoices]
+    () =>
+      [...(activeTab === 'archived' ? archivedInvoices : activeInvoices)].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      ),
+    [activeInvoices, archivedInvoices, activeTab]
   );
 
   const handleLogout = async () => {
@@ -133,11 +157,18 @@ function DashboardPage() {
         type: response.contentType || 'application/octet-stream',
       });
       const blobUrl = window.URL.createObjectURL(blob);
-      window.open(blobUrl, '_blank', 'noopener,noreferrer');
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
+      const fileName = getFileNameFromDisposition(response.contentDisposition);
+      setViewer({ open: true, blobUrl, mimeType: response.contentType || '', fileName });
     } catch (error) {
       setActionMessage(error.response?.data?.message || 'Unable to view invoice file.');
     }
+  };
+
+  const closeViewer = () => {
+    if (viewer.blobUrl) {
+      window.URL.revokeObjectURL(viewer.blobUrl);
+    }
+    setViewer({ open: false, blobUrl: '', mimeType: '', fileName: '' });
   };
 
   const handleDeleteInvoice = async (invoiceId) => {
@@ -152,6 +183,17 @@ function DashboardPage() {
       await loadData();
     } catch (error) {
       setActionMessage(error.response?.data?.message || 'Failed to delete invoice.');
+    }
+  };
+
+  const handleArchiveInvoice = async (invoiceId) => {
+    try {
+      await archiveInvoiceRequest(invoiceId);
+      setActionMessage('Invoice archived successfully.');
+      await loadData();
+      setActiveTab('archived');
+    } catch (error) {
+      setActionMessage(error.response?.data?.message || 'Failed to archive invoice.');
     }
   };
 
@@ -292,8 +334,28 @@ function DashboardPage() {
 
         <div className="rounded-2xl bg-white p-6 shadow-card">
           <h2 className="text-lg font-semibold text-slate-900">
-            {isAdmin ? 'All Invoices' : 'My Invoices'}
+            {isAdmin ? 'Invoices' : 'My Invoices'}
           </h2>
+          <div className="mt-3 inline-flex rounded-lg bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('active')}
+              className={`rounded-md px-4 py-2 text-sm ${
+                activeTab === 'active' ? 'bg-white shadow text-primary-700' : 'text-slate-600'
+              }`}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('archived')}
+              className={`rounded-md px-4 py-2 text-sm ${
+                activeTab === 'archived' ? 'bg-white shadow text-primary-700' : 'text-slate-600'
+              }`}
+            >
+              Archived
+            </button>
+          </div>
 
           {sortedInvoices.length === 0 ? (
             <p className="mt-3 text-sm text-slate-600">No invoices available.</p>
@@ -335,20 +397,24 @@ function DashboardPage() {
 
                           {isAdmin ? (
                             <>
-                              <button
-                                type="button"
-                                onClick={() => handleInvoiceDecision(item._id, 'approve')}
-                                className="rounded-md bg-green-600 px-3 py-1 text-white"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleInvoiceDecision(item._id, 'reject')}
-                                className="rounded-md bg-red-600 px-3 py-1 text-white"
-                              >
-                                Reject
-                              </button>
+                              {item.approvalStatus === 'pending' && !item.archivedAt ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleInvoiceDecision(item._id, 'approve')}
+                                    className="rounded-md bg-green-600 px-3 py-1 text-white"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleInvoiceDecision(item._id, 'reject')}
+                                    className="rounded-md bg-red-600 px-3 py-1 text-white"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() => handleViewInvoice(item._id)}
@@ -367,6 +433,15 @@ function DashboardPage() {
                               </button>
                             </>
                           ) : null}
+                          {!item.archivedAt ? (
+                            <button
+                              type="button"
+                              onClick={() => handleArchiveInvoice(item._id)}
+                              className="rounded-md border border-slate-300 px-3 py-1"
+                            >
+                              Archive
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => handleDeleteInvoice(item._id)}
@@ -384,6 +459,30 @@ function DashboardPage() {
           )}
         </div>
       </div>
+
+      {viewer.open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-5xl rounded-2xl bg-white p-4 shadow-card">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">{viewer.fileName || 'Invoice File'}</h3>
+              <button
+                type="button"
+                onClick={closeViewer}
+                className="rounded-md border border-slate-300 px-3 py-1 text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="h-[75vh] overflow-hidden rounded-lg border border-slate-200">
+              {viewer.mimeType?.startsWith('image/') ? (
+                <img src={viewer.blobUrl} alt="Invoice file preview" className="h-full w-full object-contain" />
+              ) : (
+                <iframe title="Invoice file preview" src={viewer.blobUrl} className="h-full w-full" />
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
