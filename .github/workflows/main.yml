@@ -1,0 +1,10 @@
+            - name: create macOS dmg
+  # You may pin to the exact commit or the version.
+  # uses: L-Super/create-dmg-actions@8c59360de7ec731bfa03ce3bd2ad5ae650169864
+  uses: L-Super/create-dmg-actions@v1.0.3
+  with:
+    # Path of the Application Bundle.
+    src_dir: # default is src_dir
+    # Set the name of the output DMG file.
+    dmg_name: # default is dmg_name
+          
