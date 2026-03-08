@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { body, param } from 'express-validator';
 import {
+  archiveInvoice,
   deleteInvoice,
   downloadApprovedInvoice,
   getInvoiceById,
@@ -160,6 +161,13 @@ router.delete(
   [param('invoiceId').isMongoId().withMessage('Valid invoice id is required')],
   validateRequest,
   deleteInvoice
+);
+
+router.patch(
+  '/:invoiceId/archive',
+  [param('invoiceId').isMongoId().withMessage('Valid invoice id is required')],
+  validateRequest,
+  archiveInvoice
 );
 
 export default router;

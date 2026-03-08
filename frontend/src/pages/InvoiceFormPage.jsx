@@ -145,7 +145,7 @@ function InvoiceFormPage() {
     const payload = {
       ...formValues,
       invoiceYear: Number(formValues.invoiceYear),
-      invoiceAmount: Number(formValues.invoiceAmount),
+      invoiceAmount: Number.parseFloat(formValues.invoiceAmount).toFixed(2),
     };
 
     if (!hasUploadedFile) {

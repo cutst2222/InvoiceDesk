@@ -5,8 +5,10 @@ export const submitInvoiceRequest = async (payload) => {
   return response.data;
 };
 
-export const listInvoicesRequest = async () => {
-  const response = await api.get('/invoices');
+export const listInvoicesRequest = async ({ archived = false } = {}) => {
+  const response = await api.get('/invoices', {
+    params: { archived },
+  });
   return response.data;
 };
 
@@ -51,5 +53,10 @@ export const viewInvoiceRequest = async (invoiceId) => {
 
 export const deleteInvoiceRequest = async (invoiceId) => {
   const response = await api.delete(`/invoices/${invoiceId}`);
+  return response.data;
+};
+
+export const archiveInvoiceRequest = async (invoiceId) => {
+  const response = await api.patch(`/invoices/${invoiceId}/archive`);
   return response.data;
 };

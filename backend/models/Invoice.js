@@ -33,6 +33,14 @@ const invoiceSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0.01,
+      set: (value) => {
+        const amount = Number(value);
+        if (!Number.isFinite(amount)) {
+          return value;
+        }
+
+        return Math.round((amount + Number.EPSILON) * 100) / 100;
+      },
     },
     serviceProvided: {
       type: String,
@@ -91,6 +99,10 @@ const invoiceSchema = new mongoose.Schema(
       default: null,
     },
     fileDeletedAt: {
+      type: Date,
+      default: null,
+    },
+    archivedAt: {
       type: Date,
       default: null,
     },
