@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Consultant Invoice Submission",
+  "version": "1.0.0",
+  "identifier": "com.invoicedesk.consultantinvoice",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../frontend run dev -- --host 0.0.0.0 --port 5173",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm --prefix ../frontend run build",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Consultant Invoice Submission",
+        "width": 1280,
+        "height": 860,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}

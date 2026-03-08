@@ -1,0 +1,11 @@
+{
+  "name": "consultant-invoice-submission",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desktop application for consultant invoice submission.",
+  "scripts": {
+    "dev": "npm --prefix backend run dev",
+    "tauri": "node scripts/tauri.js",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install && npm --prefix tauri-app install"
+  }
+}
