@@ -4,11 +4,14 @@ const path = require('path');
 const fs = require('fs');
 
 const mode = process.argv[2];
+const isWindows = process.platform === 'win32';
 
-const npmCliPath = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+const npmCliPath = isWindows
+  ? path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
+  : null;
 const cargoBin = path.join(os.homedir(), '.cargo', 'bin');
 
-if (!fs.existsSync(npmCliPath)) {
+if (isWindows && !fs.existsSync(npmCliPath)) {
   console.error(`Unable to locate npm cli at ${npmCliPath}`);
   process.exit(1);
 }
@@ -39,7 +42,13 @@ const run = (command, args) => {
   return child;
 };
 
-const runNpm = (args) => run(process.execPath, [npmCliPath, ...args]);
+const runNpm = (args) => {
+  if (isWindows) {
+    return run(process.execPath, [npmCliPath, ...args]);
+  }
+
+  return run('npm', args);
+};
 
 const runSequence = async (steps) => {
   for (const args of steps) {
